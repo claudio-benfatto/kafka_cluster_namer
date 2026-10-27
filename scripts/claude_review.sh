@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # This script is intended to run the Claude review process.
 # Add the commands to execute the review below.

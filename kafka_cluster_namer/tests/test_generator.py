@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-from kafka_namer.generator import generate_name, generate_names
+from kafka_namer.generator import generate_name, generate_names, validate_prefix
 from kafka_namer.words import ADJECTIVES, NOUNS
 
 
@@ -33,3 +33,19 @@ def test_generate_names_returns_requested_count_of_unique_names():
 def test_generate_names_rejects_impossible_count():
     with pytest.raises(ValueError):
         generate_names(len(ADJECTIVES) * len(NOUNS) + 1)
+
+
+def test_exclude_skips_existing_names():
+    existing = ["swift-otter"]
+    names = generate_names(5, exclude=existing)
+    assert "swift-otter" not in names
+
+
+def test_prefix_validation():
+    assert validate_prefix("prod")
+    assert validate_prefix("")
+
+
+def test_generate_names_with_many_names():
+    names = generate_names(50)
+    print(names)
