@@ -9,7 +9,7 @@ if git diff --quiet "${BASE_REF}...HEAD"; then
 fi
 
 # Schema generated from the Pydantic models: one source of truth
-SCHEMA="$(uv run python models.py)"
+SCHEMA="$(uv run --with pydantic python models.py)"
 
 git diff "${BASE_REF}...HEAD" | claude -p \
   "The input on stdin is a unified diff of a pull request. Review it for bugs, security issues and missing error handling." \

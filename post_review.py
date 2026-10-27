@@ -6,7 +6,15 @@ whole review) are listed in the review body instead, so nothing is dropped.
 
 Usage:
     cat structured_output.json | python post_review.py --dry-run --diff-file pr.diff
-    cat structured_output.json | python post_review.py --repo owner/name --pr 42
+    cat structured_output.json | python post_review.py --repo owner/name --pr 42 \\
+        --diff-file pr.diff --commit-id "$HEAD_SHA"
+
+In CI, the diff Claude reviewed, the diff used for the line mapping and the
+commit the review is attached to must all be the same version of the PR:
+write `git diff "${BASE_REF}...HEAD" > pr.diff` once, feed it to Claude, and pass
+it here via --diff-file together with --commit-id set to the reviewed head SHA
+(on pull_request events: github.event.pull_request.head.sha, also used as the
+checkout `ref`, since the default checkout is a synthetic merge commit).
 
 Posting goes through the `gh` CLI, which reads GH_TOKEN / GITHUB_TOKEN from the
 environment (in Actions: `pull-requests: write` permission is required).
@@ -62,7 +70,9 @@ def format_comment(finding: Finding) -> str:
     return f"**{finding.severity.upper()}**: {finding.message}"
 
 
-def build_payload(review: Review, diff_lines: dict[str, set[int]]) -> dict:
+def build_payload(
+    review: Review, diff_lines: dict[str, set[int]], commit_id: str | None
+) -> dict:
     inline_comments = []
     outside_diff = []
 
@@ -90,6 +100,10 @@ def build_payload(review: Review, diff_lines: dict[str, set[int]]) -> dict:
         )
 
     payload: dict[str, object] = {"body": "\n\n".join(body_parts), "event": "COMMENT"}
+    if commit_id:
+        # Pin the review to the reviewed commit; otherwise GitHub uses the
+        # latest head at posting time, which may have moved since.
+        payload["commit_id"] = commit_id
     if inline_comments:
         payload["comments"] = inline_comments
     return payload
@@ -119,6 +133,7 @@ def main() -> None:
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"),
                         help="owner/name (default: $GITHUB_REPOSITORY)")
     parser.add_argument("--pr", type=int, help="pull request number")
+    parser.add_argument("--commit-id", help="head SHA that was reviewed (required to post)")
     parser.add_argument("--diff-file", help="local unified diff, instead of fetching the PR's diff")
     parser.add_argument("--dry-run", action="store_true", help="print the payload, do not post")
     args = parser.parse_args()
@@ -129,11 +144,14 @@ def main() -> None:
         with open(args.diff_file) as f:
             diff = f.read()
     elif args.repo and args.pr:
+        print("warning: no --diff-file, fetching the PR's current diff; it may differ "
+              "from the diff that was reviewed if commits were pushed meanwhile",
+              file=sys.stderr)
         diff = fetch_diff(args.repo, args.pr)
     else:
         parser.error("provide --diff-file, or both --repo and --pr, to know which lines are in the diff")
 
-    payload = build_payload(review, commentable_lines(diff))
+    payload = build_payload(review, commentable_lines(diff), args.commit_id)
 
     if args.dry_run:
         print(json.dumps(payload, indent=2))
@@ -141,6 +159,8 @@ def main() -> None:
 
     if not (args.repo and args.pr):
         parser.error("--repo and --pr are required to post")
+    if not args.commit_id:
+        parser.error("--commit-id is required to post, so comments land on the reviewed commit")
     post_review(args.repo, args.pr, payload)
     print(f"Posted review with {len(payload.get('comments', []))} inline comment(s).")
 
