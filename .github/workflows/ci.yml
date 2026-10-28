@@ -69,17 +69,6 @@ jobs:
       - name: Write the PR diff
         run: git diff "${BASE_REF}...HEAD" > pr.diff
 
-      # TEMPORARY: show the token's shape (not its value) to debug the 401.
-      - name: Check the auth token
-        run: |
-          echo "length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
-          echo "prefix: $(printf %s "$CLAUDE_CODE_OAUTH_TOKEN" | head -c 11)"
-          echo "contains whitespace: $(printf %s "$CLAUDE_CODE_OAUTH_TOKEN" | grep -c '[[:space:]]' || true)"
-          echo "ANTHROPIC_API_KEY set: ${ANTHROPIC_API_KEY:+yes}"
-          echo "ANTHROPIC_AUTH_TOKEN set: ${ANTHROPIC_AUTH_TOKEN:+yes}"
-          claude --version
-          claude -p "say hi" --max-turns 1 || true
-
       - name: Review the PR with Claude
         run: |
           # A secret pasted with a trailing newline or space still shows as ***
